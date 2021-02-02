@@ -166,10 +166,10 @@ type ExternalSecretStatusCondition struct {
 
 type ExternalSecretStatus struct {
 	// +optional
-	Phase ExternalSecretStatusPhase `json:"phase"`
+	Phase ExternalSecretStatusPhase `json:"phase,omitempty"`
 
 	// +optional
-	Conditions []ExternalSecretStatusCondition `json:"conditions"`
+	Conditions []ExternalSecretStatusCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

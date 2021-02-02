@@ -41,7 +41,7 @@ const (
 	requeueAfter = time.Second * 30
 )
 
-// ExternalSecretReconciler reconciles a ExternalSecret object.
+// Reconciler reconciles a ExternalSecret object.
 type Reconciler struct {
 	client.Client
 	Log    logr.Logger
@@ -51,6 +51,7 @@ type Reconciler struct {
 // +kubebuilder:rbac:groups=external-secrets.io,resources=externalsecrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=external-secrets.io,resources=externalsecrets/status,verbs=get;update;patch
 
+// Reconcile reconciles a SecretStore object.
 func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("ExternalSecret", req.NamespacedName)
@@ -128,7 +129,6 @@ func (r *Reconciler) getStore(ctx context.Context, externalSecret *esv1alpha1.Ex
 	if err != nil {
 		return nil, fmt.Errorf("could not get SecretStore %q, %w", ref.Name, err)
 	}
-
 	return &secretStore, nil
 }
 
@@ -156,6 +156,7 @@ func (r *Reconciler) getProviderSecretData(ctx context.Context, providerClient p
 	return providerData, nil
 }
 
+// SetupWithManager creates a new ControllerManager
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&esv1alpha1.ExternalSecret{}).

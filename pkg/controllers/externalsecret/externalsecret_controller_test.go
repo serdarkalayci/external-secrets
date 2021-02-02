@@ -16,8 +16,10 @@ package externalsecret
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	utils "github.com/external-secrets/external-secrets/pkg/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -92,6 +94,7 @@ var _ = Describe("ExternalsecretController", func() {
 
 				Spec: esv1alpha1.SecretStoreSpec{
 					Controller: StoreControllerName,
+					Provider:   &esv1alpha1.SecretStoreProvider{AWSSM: &esv1alpha1.AWSSMProvider{}},
 				},
 			}
 
@@ -147,7 +150,6 @@ var _ = Describe("ExternalsecretController", func() {
 					},
 				},
 			}
-
 			Expect(k8sClient.Create(ctx, externalSecret)).Should(Succeed())
 
 			externalSecretLookupKey := types.NamespacedName{Name: ExternalSecretName, Namespace: ExternalSecretNamespace}
@@ -172,25 +174,6 @@ var _ = Describe("ExternalsecretController", func() {
 			Expect(createdExternalSecret.Spec.Data[2].SecretKey).Should(Equal(ExternalSecret3Key))
 			Expect(createdExternalSecret.Spec.Data[2].RemoteRef.Version).Should(Equal(ExternalSecret3Version))
 
-			By("Creating a new secret with correct values")
-			secret := &corev1.Secret{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, externalSecretLookupKey, secret)
-				if err != nil {
-					return false
-				}
-				return true
-			}, timeout, interval).Should(BeTrue())
-
-			secretValue := string(secret.Data[ExternalSecretKey])
-			Expect(secretValue).Should(Equal("test-keytest-versionTestParameter"))
-
-			secretValue2 := string(secret.Data[ExternalSecret2Key])
-			Expect(secretValue2).Should(Equal("test-key-2test-version-2TestParameter"))
-
-			secretValue3 := string(secret.Data[ExternalSecret3Key])
-			Expect(secretValue3).Should(Equal("test-key-3test-version-3TestParameter"))
-
 			By("Updating the Secret if it already exists")
 			updatedSecrets := []esv1alpha1.ExternalSecretData{
 				{
@@ -214,15 +197,6 @@ var _ = Describe("ExternalsecretController", func() {
 				return updatedExternalSecret.Spec.Data
 			}, timeout, interval).Should(Equal(updatedSecrets))
 
-			updatedSecret := &corev1.Secret{}
-			Eventually(func() string {
-				err := k8sClient.Get(ctx, externalSecretLookupKey, updatedSecret)
-				if err != nil {
-					return ""
-				}
-				return string(updatedSecret.Data[ExternalSecretKeyUpdate])
-			}, timeout, interval).Should(Equal("test-key-updatetest-version-updateTestParameter"))
-
 			By("Deleting the External Secret")
 			Eventually(func() error {
 				es := &esv1alpha1.ExternalSecret{}
@@ -238,4 +212,88 @@ var _ = Describe("ExternalsecretController", func() {
 
 	})
 
+	Context("When interacting with Backend", func() {
+		ctx := context.Background()
+		randomObjSafeStr, _ := utils.RandomStringObjectSafe(21)
+
+		It("Should Fail when a store cannot be retrieved", func() {
+
+			randomSecretStoreName := SecretStoreName + randomObjSafeStr
+			randomExternalSecretName := ExternalSecretName + randomObjSafeStr
+
+			// Create a new SecretStore
+			secretStore := &esv1alpha1.SecretStore{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      randomSecretStoreName,
+					Namespace: ExternalSecretNamespace,
+				},
+
+				Spec: esv1alpha1.SecretStoreSpec{
+					Controller: StoreControllerName,
+					Provider:   &esv1alpha1.SecretStoreProvider{AWSSM: &esv1alpha1.AWSSMProvider{}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, secretStore)).Should(Succeed())
+
+			// Validate the existence of the previously created SecretStore
+			secretStoreLookupKey := types.NamespacedName{Name: randomSecretStoreName, Namespace: ExternalSecretNamespace}
+			createdSecretStore := &esv1alpha1.SecretStore{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, secretStoreLookupKey, createdSecretStore)
+				if err != nil {
+					return false
+				}
+				return true
+			}, timeout, interval).Should(BeTrue())
+
+			// Create a new ExternalSecret (using the store created previously)
+			externalSecret := &esv1alpha1.ExternalSecret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      randomExternalSecretName,
+					Namespace: ExternalSecretNamespace,
+				},
+				Spec: esv1alpha1.ExternalSecretSpec{
+					SecretStoreRef: esv1alpha1.SecretStoreRef{
+						Name: randomSecretStoreName,
+					},
+					Target: esv1alpha1.ExternalSecretTarget{
+						Name: TargetName,
+					},
+					Data: []esv1alpha1.ExternalSecretData{
+						{
+							SecretKey: ExternalSecretKey,
+							RemoteRef: esv1alpha1.ExternalSecretDataRemoteRef{
+								Key:     ExternalSecretKey,
+								Version: ExternalSecretVersion,
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, externalSecret)).Should(Succeed())
+
+			// Validate the existence of the previously created ExternalSecret
+			externalSecretLookupKey := types.NamespacedName{Name: randomExternalSecretName, Namespace: ExternalSecretNamespace}
+			var createdExternalSecret esv1alpha1.ExternalSecret
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, externalSecretLookupKey, &createdExternalSecret)
+				if err != nil {
+					return false
+				}
+				return true
+			}, timeout, interval).Should(BeTrue())
+
+			fmt.Printf("ExternalSecret name is: %v", createdExternalSecret.Name)
+
+			Eventually(func() string {
+				store, err := r.getStore(ctx, &createdExternalSecret)
+				if err != nil {
+					return store.GetName()
+				}
+				return store.GetName()
+			}, timeout, interval).Should(Equal(randomSecretStoreName))
+		})
+	})
 })
