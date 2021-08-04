@@ -28,10 +28,33 @@ var _ = Describe("[vault] ", func() {
 
 	DescribeTable("sync secrets",
 		framework.TableFunc(f,
-			newVaultProvider(f, "http://vault.default:8200", "root")),
+			newVaultProvider(f)),
+		// uses token auth
 		Entry(common.JSONDataFromSync(f)),
 		Entry(common.JSONDataWithProperty(f)),
 		Entry(common.JSONDataWithTemplate(f)),
 		Entry(common.DataPropertyDockerconfigJSON(f)),
+		// use cert auth
+		useCertAuth(common.JSONDataFromSync(f)),
+		useCertAuth(common.JSONDataWithProperty(f)),
+		useCertAuth(common.JSONDataWithTemplate(f)),
+		useCertAuth(common.DataPropertyDockerconfigJSON(f)),
+		// use cert auth
+		useApproleAuth(common.JSONDataFromSync(f)),
+		useApproleAuth(common.JSONDataWithProperty(f)),
+		useApproleAuth(common.JSONDataWithTemplate(f)),
+		useApproleAuth(common.DataPropertyDockerconfigJSON(f)),
 	)
 })
+
+func useCertAuth(desc string, tc func(f *framework.TestCase)) TableEntry {
+	return Entry(desc+" with cert auth", tc, func(tc *framework.TestCase) {
+		tc.ExternalSecret.Spec.SecretStoreRef.Name = certAuthProviderName
+	})
+}
+
+func useApproleAuth(desc string, tc func(f *framework.TestCase)) TableEntry {
+	return Entry(desc+" with approle auth", tc, func(tc *framework.TestCase) {
+		tc.ExternalSecret.Spec.SecretStoreRef.Name = appRoleAuthProviderName
+	})
+}
